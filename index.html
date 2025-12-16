@@ -1,0 +1,863 @@
+here<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Solitaire Web3</title>
+    <style>
+        :root {
+            --bg-color: #050505;
+            --card-width: 13vw; /* Responsif */
+            --card-height: 19vw;
+            --card-gap: 2vw;
+            --neon-blue: #00f3ff;
+            --neon-pink: #ff00ff;
+            --neon-gold: #ffd700; /* Warna Joker */
+            --text-glow-blue: 0 0 5px #00f3ff, 0 0 10px #00f3ff;
+            --text-glow-pink: 0 0 5px #ff00ff, 0 0 10px #ff00ff;
+            --box-glow-blue: 0 0 5px #00f3ff, inset 0 0 10px rgba(0, 243, 255, 0.2);
+            --box-glow-pink: 0 0 5px #ff00ff, inset 0 0 10px rgba(255, 0, 255, 0.2);
+            --nav-height: 70px;
+        }
+
+        @media (min-width: 600px) {
+            :root {
+                --card-width: 80px;
+                --card-height: 112px;
+                --card-gap: 20px;
+            }
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: white;
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Mencegah scroll saat drag */
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* --- LAYOUT --- */
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - var(--nav-height));
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .top-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            height: var(--card-height);
+        }
+
+        .stock-waste-area, .foundation-area {
+            display: flex;
+            gap: var(--card-gap);
+        }
+
+        .tableau-area {
+            display: flex;
+            justify-content: space-between;
+            height: 100%;
+            position: relative;
+        }
+
+        /* --- PILES (Tempat Kartu) --- */
+        .pile {
+            width: var(--card-width);
+            height: var(--card-height);
+            border: 1px solid #333;
+            border-radius: 8px;
+            position: relative;
+        }
+
+        .pile-placeholder {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #333;
+            font-size: 24px;
+        }
+
+        /* --- KARTU --- */
+        .card {
+            width: var(--card-width);
+            height: var(--card-height);
+            background-color: rgba(0, 0, 0, 0.8);
+            border-radius: 8px;
+            position: absolute;
+            cursor: pointer;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 5px;
+            transition: transform 0.2s ease, box-shadow 0.2s;
+            backface-visibility: hidden;
+            z-index: 10;
+        }
+
+        .card.dragging {
+            z-index: 1000 !important;
+            opacity: 0.9;
+            transform: scale(1.1);
+            transition: none; /* Hilangkan transisi saat drag manual */
+            pointer-events: none; /* Agar event tembus ke elemen bawahnya */
+        }
+
+        /* Kartu Belakang */
+        .card-back {
+            background: repeating-linear-gradient(
+                45deg,
+                #111,
+                #111 10px,
+                #222 10px,
+                #222 20px
+            );
+            border: 1px solid #444;
+        }
+
+        /* Gaya Neon Biru (Hitam) */
+        .card.black {
+            border: 1px solid var(--neon-blue);
+            box-shadow: var(--box-glow-blue);
+            color: var(--neon-blue);
+        }
+        .card.black .suit, .card.black .value {
+            text-shadow: var(--text-glow-blue);
+        }
+
+        /* Gaya Neon Pink (Merah) */
+        .card.red {
+            border: 1px solid var(--neon-pink);
+            box-shadow: var(--box-glow-pink);
+            color: var(--neon-pink);
+        }
+        .card.red .suit, .card.red .value {
+            text-shadow: var(--text-glow-pink);
+        }
+
+        /* Gaya Joker */
+        .card.joker {
+            border: 2px solid var(--neon-gold);
+            box-shadow: 0 0 10px var(--neon-gold), inset 0 0 10px var(--neon-gold);
+            color: var(--neon-gold);
+        }
+
+        .card-top {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            line-height: 1;
+        }
+        .card-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2.5rem;
+        }
+        .card-bottom {
+            transform: rotate(180deg);
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            line-height: 1;
+        }
+
+        .value { font-size: 1rem; font-weight: bold; }
+        .suit-small { font-size: 1rem; }
+
+        /* Media query untuk simbol lebih kecil di HP */
+        @media (max-width: 600px) {
+            .card-center { font-size: 1.5rem; }
+            .value { font-size: 0.8rem; }
+        }
+
+        /* --- NAVBAR --- */
+        #bottom-nav {
+            height: var(--nav-height);
+            background-color: #111;
+            border-top: 1px solid #333;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            z-index: 2000;
+        }
+
+        .nav-btn {
+            background: none;
+            border: none;
+            color: #888;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: color 0.3s;
+        }
+
+        .nav-btn:hover, .nav-btn:active {
+            color: white;
+        }
+
+        .nav-btn svg {
+            width: 24px;
+            height: 24px;
+            margin-bottom: 4px;
+            fill: currentColor;
+        }
+
+        .nav-btn.joker-active {
+            color: var(--neon-gold);
+            text-shadow: 0 0 5px var(--neon-gold);
+        }
+
+        /* --- MODAL --- */
+        #modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 3000;
+        }
+        .modal {
+            background: #111;
+            border: 1px solid var(--neon-blue);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.2);
+            max-width: 80%;
+        }
+        .modal h2 { color: var(--neon-blue); margin-top: 0; }
+        .modal p { margin: 15px 0; }
+        .btn-primary {
+            background: transparent;
+            border: 1px solid var(--neon-pink);
+            color: var(--neon-pink);
+            padding: 10px 20px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 0 5px var(--neon-pink);
+        }
+        .btn-primary:active { background: var(--neon-pink); color: #000; }
+
+        /* Animasi Kemenangan */
+        .winner-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0,0,0,0.9);
+            z-index: 4000;
+        }
+        .winner-text {
+            font-size: 3rem;
+            color: var(--neon-gold);
+            text-shadow: 0 0 10px var(--neon-gold), 0 0 20px var(--neon-pink);
+            animation: pulse 1s infinite alternate;
+        }
+        @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.1); } }
+
+    </style>
+</head>
+<body>
+
+    <!-- GAME BOARD -->
+    <div id="game-container">
+        <!-- TOP ROW: Stock, Waste, Foundations -->
+        <div class="top-row">
+            <div class="stock-waste-area">
+                <div id="stock" class="pile" onclick="drawCard()">
+                    <div class="pile-placeholder">↺</div>
+                </div>
+                <div id="waste" class="pile"></div>
+            </div>
+            
+            <div class="foundation-area">
+                <div id="foundation-0" class="pile foundation" data-suit="H"></div>
+                <div id="foundation-1" class="pile foundation" data-suit="D"></div>
+                <div id="foundation-2" class="pile foundation" data-suit="C"></div>
+                <div id="foundation-3" class="pile foundation" data-suit="S"></div>
+            </div>
+        </div>
+
+        <!-- TABLEAU: 7 Columns -->
+        <div class="tableau-area">
+            <div id="tableau-0" class="pile tableau"></div>
+            <div id="tableau-1" class="pile tableau"></div>
+            <div id="tableau-2" class="pile tableau"></div>
+            <div id="tableau-3" class="pile tableau"></div>
+            <div id="tableau-4" class="pile tableau"></div>
+            <div id="tableau-5" class="pile tableau"></div>
+            <div id="tableau-6" class="pile tableau"></div>
+        </div>
+    </div>
+
+    <!-- NAVBAR -->
+    <nav id="bottom-nav">
+        <button class="nav-btn" onclick="showMenu()">
+            <svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+            Menu
+        </button>
+        <button class="nav-btn" onclick="confirmNewGame()">
+            <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+            New Game
+        </button>
+        <button class="nav-btn" onclick="activateJoker()" id="btn-joker">
+            <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm4.24 16L12 15.45 7.77 18l1.12-4.81-3.73-3.23 4.92-.42L12 5l1.92 4.53 4.92.42-3.73 3.23L16.23 18z"/></svg>
+            Joker
+        </button>
+        <button class="nav-btn" onclick="undoMove()">
+            <svg viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
+            Undo
+        </button>
+    </nav>
+
+    <!-- POPUPS -->
+    <div id="modal-overlay">
+        <div class="modal" id="modal-content"></div>
+    </div>
+
+    <div class="winner-screen" id="winner-screen">
+        <div class="winner-text">YOU WIN!</div>
+        <button class="btn-primary" style="margin-top:20px" onclick="initGame()">Main Lagi</button>
+    </div>
+
+<script>
+/**
+ * SOLITAIRE ENGINE
+ */
+
+const SUITS = ['H', 'D', 'C', 'S']; // Hearts, Diamonds, Clubs, Spades
+const VALUES = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+const SYMBOLS = { 'H': '♥', 'D': '♦', 'C': '♣', 'S': '♠' };
+
+// State Permainan
+let deck = [];
+let piles = {
+    stock: [],
+    waste: [],
+    foundations: [[], [], [], []],
+    tableau: [[], [], [], [], [], [], []]
+};
+let history = []; // Untuk Undo
+let draggedCards = null;
+let dragOrigin = null;
+
+// --- INITIALIZATION ---
+
+window.onload = () => {
+    initGame();
+    // Event listeners global untuk drag
+    document.addEventListener('mousemove', onDragMove);
+    document.addEventListener('mouseup', onDragEnd);
+    document.addEventListener('touchmove', onDragMove, {passive: false});
+    document.addEventListener('touchend', onDragEnd);
+};
+
+function initGame() {
+    // Reset state
+    deck = createDeck();
+    shuffle(deck);
+    piles = {
+        stock: [], waste: [],
+        foundations: [[], [], [], []],
+        tableau: [[], [], [], [], [], [], []]
+    };
+    history = [];
+    document.getElementById('winner-screen').style.display = 'none';
+
+    // Deal kartu
+    dealCards();
+    renderBoard();
+    saveState(); // State awal untuk undo
+}
+
+function createDeck() {
+    let newDeck = [];
+    for (let s of SUITS) {
+        for (let v of VALUES) {
+            newDeck.push({
+                suit: s,
+                value: v,
+                color: (s === 'H' || s === 'D') ? 'red' : 'black',
+                faceUp: false,
+                id: Math.random().toString(36).substr(2, 9),
+                isJoker: false
+            });
+        }
+    }
+    return newDeck;
+}
+
+function shuffle(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+}
+
+function dealCards() {
+    let cardIdx = 0;
+    // Deal ke Tableau
+    for (let i = 0; i < 7; i++) {
+        for (let j = 0; j <= i; j++) {
+            let card = deck[cardIdx++];
+            if (j === i) card.faceUp = true; // Kartu paling atas terbuka
+            piles.tableau[i].push(card);
+        }
+    }
+    // Sisa ke Stock
+    while (cardIdx < deck.length) {
+        piles.stock.push(deck[cardIdx++]);
+    }
+}
+
+// --- RENDERING ---
+
+function renderBoard() {
+    renderPile('stock', piles.stock, true);
+    renderPile('waste', piles.waste, false);
+    
+    for(let i=0; i<4; i++) {
+        renderPile(`foundation-${i}`, piles.foundations[i], false);
+    }
+    
+    for(let i=0; i<7; i++) {
+        renderPile(`tableau-${i}`, piles.tableau[i], false, true);
+    }
+    
+    checkWinCondition();
+}
+
+function renderPile(elementId, cards, isStock, isTableau = false) {
+    const el = document.getElementById(elementId);
+    el.innerHTML = '';
+    
+    // Placeholder symbol
+    if (cards.length === 0) {
+        el.innerHTML = `<div class="pile-placeholder">${isStock ? '↺' : ''}</div>`;
+        return;
+    }
+
+    // Untuk Stock, hanya render kartu paling atas (tertutup) atau kosong
+    if (isStock) {
+        let cardDiv = createCardDiv(cards[cards.length - 1], true); // true = force back
+        el.appendChild(cardDiv);
+        return;
+    }
+
+    // Render kartu
+    cards.forEach((card, index) => {
+        // Untuk tableau, render semua. Untuk pile lain, hanya render top card (optimasi DOM)
+        // Kecuali tableau, kita hanya perlu melihat top card
+        if (!isTableau && index !== cards.length - 1) return;
+
+        let cardDiv = createCardDiv(card);
+        
+        // Positioning untuk Tableau (Vertical stack)
+        if (isTableau) {
+            cardDiv.style.top = `${index * 25}px`; // Jarak tumpuk
+        } else {
+            cardDiv.style.top = '0px';
+        }
+
+        // Event Handler
+        if (card.faceUp) {
+            // Mouse Events
+            cardDiv.onmousedown = (e) => onDragStart(e, card, elementId);
+            // Touch Events
+            cardDiv.ontouchstart = (e) => onDragStart(e, card, elementId);
+            // Click/Tap (Auto Move)
+            cardDiv.onclick = (e) => {
+                e.stopPropagation(); // Mencegah klik tembus
+                if(!draggedCards) tryAutoMove(card, elementId);
+            };
+        }
+
+        el.appendChild(cardDiv);
+    });
+}
+
+function createCardDiv(card, forceBack = false) {
+    const div = document.createElement('div');
+    div.className = 'card';
+    
+    if (!card.faceUp || forceBack) {
+        div.classList.add('card-back');
+    } else {
+        div.classList.add(card.isJoker ? 'joker' : card.color);
+        
+        // Simbol
+        const symbol = card.isJoker ? '★' : SYMBOLS[card.suit];
+        const val = card.isJoker ? 'JOKER' : card.value;
+
+        div.innerHTML = `
+            <div class="card-top">
+                <span class="value">${val}</span>
+                <span class="suit-small">${symbol}</span>
+            </div>
+            <div class="card-center">${symbol}</div>
+            <div class="card-bottom">
+                <span class="value">${val}</span>
+                <span class="suit-small">${symbol}</span>
+            </div>
+        `;
+    }
+    div.dataset.id = card.id;
+    return div;
+}
+
+// --- GAME LOGIC: RULES ---
+
+function getCardValue(val) {
+    if (val === 'A') return 1;
+    if (val === 'J') return 11;
+    if (val === 'Q') return 12;
+    if (val === 'K') return 13;
+    if (val === 'JOKER') return 99; // Joker value
+    return parseInt(val);
+}
+
+function canPlaceOnFoundation(card, foundationPile) {
+    if (card.isJoker) return false; // Joker tidak boleh ke Foundation (aturan opsional)
+    
+    if (foundationPile.length === 0) {
+        return card.value === 'A';
+    }
+    const topCard = foundationPile[foundationPile.length - 1];
+    return topCard.suit === card.suit && getCardValue(card.value) === getCardValue(topCard.value) + 1;
+}
+
+function canPlaceOnTableau(card, tableauPile) {
+    if (tableauPile.length === 0) {
+        return card.value === 'K' || card.isJoker; // King atau Joker boleh di tempat kosong
+    }
+    
+    const topCard = tableauPile[tableauPile.length - 1];
+    
+    // Logika Joker: Joker bisa ditaruh di atas apa saja, dan apa saja bisa ditaruh di atas Joker
+    if (card.isJoker || topCard.isJoker) return true;
+
+    // Aturan Standar: Warna beda, nilai urut menurun (misal: 6 Merah di atas 7 Hitam)
+    return card.color !== topCard.color && getCardValue(card.value) === getCardValue(topCard.value) - 1;
+}
+
+// --- MOVEMENT: AUTO MOVE (CLICK) ---
+
+function tryAutoMove(card, sourceId) {
+    // 1. Cek apakah kartu paling atas di tumpukannya? (Kecuali tableau, kita bisa pindahkan stack)
+    // Untuk simplifikasi auto-move, hanya izinkan kartu paling bawah dari stack (ujung terbuka)
+    const sourcePile = getPileByElementId(sourceId);
+    if (sourcePile.indexOf(card) !== sourcePile.length - 1) return; // Bukan kartu teratas
+
+    saveState(); // Simpan history sebelum gerak
+
+    // 2. Coba pindah ke Foundation
+    for (let i = 0; i < 4; i++) {
+        if (canPlaceOnFoundation(card, piles.foundations[i])) {
+            moveCard(card, sourceId, `foundation-${i}`);
+            return;
+        }
+    }
+
+    // 3. Coba pindah ke Tableau
+    // Hanya jika bukan berasal dari tableau (untuk mencegah loop pindah-pindah antar tableau yg tidak perlu)
+    // ATAU jika dari tableau, pindahkan hanya jika membuka kartu tertutup atau memindahkan King ke tempat kosong
+    for (let i = 0; i < 7; i++) {
+        // Jangan pindahkan ke tempat asalnya sendiri
+        if (`tableau-${i}` === sourceId) continue;
+
+        if (canPlaceOnTableau(card, piles.tableau[i])) {
+            moveCard(card, sourceId, `tableau-${i}`);
+            return;
+        }
+    }
+}
+
+function moveCard(card, fromId, toId) {
+    const sourcePile = getPileByElementId(fromId);
+    const destPile = getPileByElementId(toId);
+    
+    // Logika pindah Stack (jika user drag multiple cards)
+    const cardIndex = sourcePile.indexOf(card);
+    const cardsToMove = sourcePile.splice(cardIndex); // Ambil kartu ini dan semua di bawahnya
+    
+    destPile.push(...cardsToMove);
+    
+    // Buka kartu di bawahnya jika ada (di tableau)
+    if (sourcePile.length > 0 && fromId.includes('tableau')) {
+        sourcePile[sourcePile.length - 1].faceUp = true;
+    }
+
+    renderBoard();
+}
+
+function drawCard() {
+    saveState();
+    if (piles.stock.length === 0) {
+        // Recycle Waste ke Stock
+        piles.stock = piles.waste.reverse().map(c => { c.faceUp = false; return c; });
+        piles.waste = [];
+    } else {
+        const card = piles.stock.pop();
+        card.faceUp = true;
+        piles.waste.push(card);
+    }
+    renderBoard();
+}
+
+// --- MOVEMENT: DRAG AND DROP ---
+
+function onDragStart(e, card, sourceId) {
+    if (e.type === 'mousedown' && e.button !== 0) return; // Hanya klik kiri
+    
+    // Prevent default browser dragging
+    // e.preventDefault(); (Hati-hati, ini bisa blokir scroll jika tidak pas)
+    
+    // Identifikasi tumpukan kartu yang ditarik
+    const sourcePile = getPileByElementId(sourceId);
+    const cardIndex = sourcePile.indexOf(card);
+    
+    // Validasi: hanya bisa tarik kartu terbuka
+    if (!card.faceUp) return;
+
+    const movingCards = sourcePile.slice(cardIndex);
+    
+    draggedCards = {
+        cards: movingCards,
+        sourceId: sourceId,
+        elements: []
+    };
+
+    // Ambil elemen DOM
+    const container = document.getElementById(sourceId);
+    // Cari elemen berdasarkan dataset ID (karena render ulang terus, referensi DOM lama hilang)
+    movingCards.forEach(c => {
+        const el = container.querySelector(`[data-id="${c.id}"]`);
+        if(el) {
+            el.classList.add('dragging');
+            draggedCards.elements.push(el);
+        }
+    });
+
+    // Koordinat Mouse/Touch
+    const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+    
+    // Simpan offset (jarak mouse ke pojok kartu)
+    const rect = draggedCards.elements[0].getBoundingClientRect();
+    dragOrigin = {
+        x: clientX - rect.left,
+        y: clientY - rect.top,
+        startX: rect.left,
+        startY: rect.top
+    };
+}
+
+function onDragMove(e) {
+    if (!draggedCards) return;
+    e.preventDefault(); // Prevent scroll saat drag
+
+    const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+    // Gerakkan elemen
+    draggedCards.elements.forEach((el, index) => {
+        // Hitung posisi absolut baru (fixed position relative to screen/viewport)
+        // Kita menggunakan fixed positioning atau transform untuk drag visual
+        el.style.position = 'fixed'; 
+        el.style.left = `${clientX - dragOrigin.x}px`;
+        el.style.top = `${clientY - dragOrigin.y + (index * 25)}px`; // Stack offset
+        el.style.zIndex = 9999;
+    });
+}
+
+function onDragEnd(e) {
+    if (!draggedCards) return;
+
+    // Sembunyikan kartu yang sedang didrag sementara untuk melihat apa yang ada di bawahnya
+    draggedCards.elements.forEach(el => el.style.display = 'none');
+
+    // Deteksi elemen di bawah pointer
+    const clientX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
+    const clientY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+    const elemBelow = document.elementFromPoint(clientX, clientY);
+
+    // Kembalikan display
+    draggedCards.elements.forEach(el => el.style.display = '');
+
+    // Cari drop target (pile)
+    const dropTarget = elemBelow ? elemBelow.closest('.pile') : null;
+
+    let success = false;
+    
+    if (dropTarget) {
+        const targetId = dropTarget.id;
+        const targetPile = getPileByElementId(targetId);
+        const leadingCard = draggedCards.cards[0];
+
+        // Cek Validasi Move
+        let valid = false;
+        if (targetId.includes('foundation')) {
+            // Foundation hanya terima 1 kartu dalam 1 waktu
+            if (draggedCards.cards.length === 1 && canPlaceOnFoundation(leadingCard, targetPile)) {
+                valid = true;
+            }
+        } else if (targetId.includes('tableau')) {
+            if (canPlaceOnTableau(leadingCard, targetPile)) {
+                valid = true;
+            }
+        }
+
+        if (valid) {
+            saveState(); // Simpan sebelum perubahan state
+            moveCard(leadingCard, draggedCards.sourceId, targetId);
+            success = true;
+        }
+    }
+
+    if (!success) {
+        // Revert visual changes (Render ulang akan mengembalikan ke posisi semula)
+        renderBoard();
+    }
+
+    draggedCards = null;
+    dragOrigin = null;
+}
+
+// --- UTILS ---
+
+function getPileByElementId(id) {
+    if (id === 'stock') return piles.stock;
+    if (id === 'waste') return piles.waste;
+    if (id.startsWith('foundation')) {
+        const idx = parseInt(id.split('-')[1]);
+        return piles.foundations[idx];
+    }
+    if (id.startsWith('tableau')) {
+        const idx = parseInt(id.split('-')[1]);
+        return piles.tableau[idx];
+    }
+    return null;
+}
+
+// --- UNDO SYSTEM ---
+
+function saveState() {
+    // Deep copy object piles
+    // JSON.stringify/parse cara paling gampang untuk deep copy object sederhana
+    const stateSnapshot = JSON.stringify({
+        stock: piles.stock,
+        waste: piles.waste,
+        foundations: piles.foundations,
+        tableau: piles.tableau
+    });
+    history.push(stateSnapshot);
+    if (history.length > 20) history.shift(); // Batasi history
+}
+
+function undoMove() {
+    if (history.length === 0) return;
+    const previousState = JSON.parse(history.pop());
+    
+    piles.stock = previousState.stock;
+    piles.waste = previousState.waste;
+    piles.foundations = previousState.foundations;
+    piles.tableau = previousState.tableau;
+    
+    renderBoard();
+}
+
+// --- JOKER SYSTEM ---
+
+function activateJoker() {
+    showModal(`
+        <h2>Beli Kartu Joker?</h2>
+        <p>Gunakan 10 $TOKEN untuk mendapatkan Joker.</p>
+        <p>Joker bisa diletakkan di mana saja dan kartu apa saja bisa diletakkan di atasnya.</p>
+        <div style="margin-top:20px">
+            <button class="btn-primary" onclick="spawnJoker()">BELI (10 $TOKEN)</button>
+            <button class="btn-primary" style="border-color:#555; color:#888" onclick="closeModal()">BATAL</button>
+        </div>
+    `);
+}
+
+function spawnJoker() {
+    closeModal();
+    // Buat kartu Joker
+    const jokerCard = {
+        suit: 'Joker',
+        value: 'JOKER',
+        color: 'gold', // Warna spesial
+        faceUp: true,
+        id: 'joker-' + Date.now(),
+        isJoker: true
+    };
+    
+    // Masukkan ke Waste agar player bisa drag
+    saveState();
+    piles.waste.push(jokerCard);
+    renderBoard();
+}
+
+// --- UI HELPERS ---
+
+function showMenu() {
+    showModal(`
+        <h2>Menu</h2>
+        <p>Neon Solitaire v1.0</p>
+        <button class="btn-primary" onclick="closeModal()">Tutup</button>
+    `);
+}
+
+function confirmNewGame() {
+    showModal(`
+        <h2>Game Baru?</h2>
+        <p>Progress saat ini akan hilang.</p>
+        <button class="btn-primary" onclick="initGame(); closeModal()">Ya, Mulai</button>
+        <button class="btn-primary" style="border-color:#555; color:#888" onclick="closeModal()">Batal</button>
+    `);
+}
+
+function showModal(html) {
+    const modal = document.getElementById('modal-content');
+    const overlay = document.getElementById('modal-overlay');
+    modal.innerHTML = html;
+    overlay.style.display = 'flex';
+}
+
+function closeModal() {
+    document.getElementById('modal-overlay').style.display = 'none';
+}
+
+function checkWinCondition() {
+    // Menang jika semua Foundation punya 13 kartu
+    let total = 0;
+    for(let i=0; i<4; i++) {
+        total += piles.foundations[i].length;
+    }
+    if (total === 52) {
+        document.getElementById('winner-screen').style.display = 'flex';
+    }
+}
+
+</script>
+</body>
+</html>
+
